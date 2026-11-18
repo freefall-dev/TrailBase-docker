@@ -1,0 +1,43 @@
+# Rootless TrailBase (runs as the non-root `trailbase` user).
+# Run: docker compose -f docker-compose.rootless.yml up -d
+# For the root variant, use: docker compose -f docker-compose.root.yml up -d
+name: trailbase
+
+services:
+  trailbase:
+    build:
+      context: .
+      dockerfile: Dockerfile.rootless
+      args:
+        # TrailBase version to bake into the image (see .env)
+        TB_VERSION: ${TB_VERSION:-0.36.1}
+    image: trailbase:${TB_VERSION:-0.36.1}
+    container_name: ${CONTAINER_NAME:-trailbase}
+    restart: unless-stopped
+    environment:
+      # server
+      TB_PORT: ${TB_PORT:-4000}
+      TB_PUBLIC_URL: ${TB_PUBLIC_URL:-}
+      # admin bootstrap (checked/created by the entrypoint on every start)
+      TB_ADMIN_EMAIL: ${TB_ADMIN_EMAIL:-}
+      TB_ADMIN_PASSWORD: ${TB_ADMIN_PASSWORD:-}
+      RUST_BACKTRACE: "1"
+      # config overrides: any TRAIL_<FIELD_PATH> variable overrides config.textproto, e.g.
+      # TRAIL_SERVER_APPLICATION_NAME: "My App"
+    ports:
+      # host:container
+      - "${TB_PORT:-4000}:${TB_PORT:-4000}"
+    volumes:
+      # persist databases, config, uploads, secrets and backups
+      - traildepot:/app/traildepot
+      # uncomment to develop migrations against the running instance
+      # - ./migrations:/app/traildepot/migrations
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:${TB_PORT:-4000}/api/healthcheck || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+volumes:
+  traildepot:

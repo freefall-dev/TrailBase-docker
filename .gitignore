@@ -1,0 +1,25 @@
+# ── Secrets / local config ────────────────────────────────────────────
+# .env holds admin credentials — never commit it.
+.env
+.env.*
+!.env.example
+
+# ── TrailBase runtime data ────────────────────────────────────────────
+# Local bind-mounts of the depot (SQLite DBs, config, secrets, uploads, backups).
+traildepot/
+trail
+trail.exe
+
+# Migrations are usually versioned; ignore only local scratch copies.
+# migrations/
+
+# ── Tooling ───────────────────────────────────────────────────────────
+.claude/settings.local.json
+
+# ── OS / editor cruft ─────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.vscode/
+.idea/

@@ -1,0 +1,6 @@
+# Shell scripts and Docker files run inside Linux containers — they MUST keep
+# LF endings or the container fails with "no such file or directory".
+*.sh            text eol=lf
+Dockerfile*     text eol=lf
+docker-compose*.yml text eol=lf
+.env.example    text eol=lf

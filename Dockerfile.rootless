@@ -1,0 +1,69 @@
+# syntax=docker/dockerfile:1
+
+# ---- build stage: fetch + verify + unzip TrailBase ----
+FROM alpine:3.22 AS build
+
+ARG TB_VERSION=0.36.1
+# SHA-256 of the release zips (GitHub release asset digests). Refreshed by bump.sh.
+ARG TB_SHA256_AMD64=62f74261cf35b798f6e4d4e54b5477ae0fae26ffb5027c83f34d5679ba38ed9f
+ARG TB_SHA256_ARM64=3ddc605191bdb283d97de824fa1ec3a25d96b08abff54452edd5c9a241c76f4e
+ARG TB_SHA256_AUTH_UI=878853f4a3e743a425c16230e1dd54a6b70590e97a81d64a40d2bfbb643290d8
+# provided automatically by buildx (e.g. amd64, arm64)
+ARG TARGETARCH
+
+RUN apk add --no-cache unzip ca-certificates
+
+# download the static (musl) Linux binary and the prebuilt auth UI WASM component
+ADD https://github.com/trailbaseio/trailbase/releases/download/v${TB_VERSION}/trailbase_v${TB_VERSION}_x86_64_linux.zip /tmp/tb_amd64.zip
+ADD https://github.com/trailbaseio/trailbase/releases/download/v${TB_VERSION}/trailbase_v${TB_VERSION}_aarch64_linux.zip /tmp/tb_arm64.zip
+ADD https://github.com/trailbaseio/trailbase/releases/download/v${TB_VERSION}/trailbase_v${TB_VERSION}_wasm_auth_ui.zip /tmp/tb_auth_ui.zip
+
+# verify integrity against the pinned digests, then unzip
+RUN case "${TARGETARCH}" in \
+      amd64) SHA="${TB_SHA256_AMD64}" ;; \
+      arm64) SHA="${TB_SHA256_ARM64}" ;; \
+      *) echo "unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac \
+    && echo "${SHA}  /tmp/tb_${TARGETARCH}.zip" | sha256sum -c - \
+    && echo "${TB_SHA256_AUTH_UI}  /tmp/tb_auth_ui.zip" | sha256sum -c - \
+    && mkdir -p /out/wasm \
+    && unzip -j /tmp/tb_${TARGETARCH}.zip trail -d /out/ \
+    && unzip -j /tmp/tb_auth_ui.zip trailbase_auth_ui_component.wasm -d /out/wasm/ \
+    && chmod 0755 /out/trail
+
+# ---- runtime stage: minimal image with just the binary ----
+FROM alpine:3.22
+
+# ca-certificates: outbound TLS (e.g. OAuth, SMTP)
+# sqlite: used by the entrypoint to check whether the admin user already exists
+# tini: PID 1 that forwards signals and reaps zombies
+RUN apk add --no-cache ca-certificates sqlite tini \
+    # non-root user to run TrailBase (needs a writable $HOME for the wasmtime cache)
+    && addgroup -S trailbase && adduser -S -G trailbase -D -h /home/trailbase trailbase \
+    && mkdir -p /app/traildepot/wasm \
+    && chown -R trailbase:trailbase /app
+
+COPY --from=build --chown=trailbase:trailbase /out/trail /app/trail
+# the auth UI (login/register pages); copied into a fresh named volume on first start
+COPY --from=build --chown=trailbase:trailbase /out/wasm/ /app/traildepot/wasm/
+COPY --chown=trailbase:trailbase --chmod=0755 entrypoint.rootless.sh /app/entrypoint.rootless.sh
+
+# uncomment to copy the local migrations dir into the image
+# COPY --chown=trailbase:trailbase ./migrations /app/traildepot/migrations
+
+# persist databases, config, uploads, secrets and backups across container recreations
+VOLUME /app/traildepot
+
+WORKDIR /app
+USER trailbase
+
+# default listen port; override at runtime with -e TB_PORT=...
+ENV TB_PORT=4000
+EXPOSE 4000
+
+# shell form so ${TB_PORT} is expanded from the runtime environment
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget -qO- "http://127.0.0.1:${TB_PORT}/api/healthcheck" || exit 1
+
+# entrypoint handles admin bootstrap, then execs `trail run`
+ENTRYPOINT ["/sbin/tini", "--", "/app/entrypoint.rootless.sh"]
