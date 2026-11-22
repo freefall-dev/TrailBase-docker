@@ -56,6 +56,8 @@ Copy `.env.example` to `.env` and adjust. Compose reads `.env` automatically; **
 | `CONTAINER_NAME` | `trailbase` | Base name for the container. |
 | `TB_PORT` | `4000` | Port for the rootless stack (used inside the container and for the host mapping). |
 | `TB_PORT_ROOT` | `4000` | Port for the root stack. |
+| `TB_DATA` | `traildepot` | Depot storage for the rootless stack: a named volume (default) or a host path for a bind mount (must contain a `/`, e.g. `./traildepot`). |
+| `TB_DATA_ROOT` | `traildepot` | Depot storage for the root stack. Use a different host path than `TB_DATA` so the stacks don't share a depot. |
 | `TB_PUBLIC_URL` | *(empty)* | Public URL of the instance, passed as `--public-url`. Needed for auth email links and OAuth redirects. |
 | `TB_ADMIN_EMAIL` | *(empty)* | Admin email to bootstrap. Leave blank to skip bootstrapping. |
 | `TB_ADMIN_PASSWORD` | *(empty)* | Admin password. Required only when the user doesn't yet exist. |
@@ -120,7 +122,9 @@ Data survives container recreation. To develop migrations against the running in
 
 You can also bake `migrations` into the image by uncommenting the corresponding `COPY` line in the Dockerfile.
 
-> **Note:** if you switch the named volume to a host bind mount (e.g. `./traildepot:/app/traildepot`) with the rootless image, make sure the host folder exists and is writable by the container user, or TrailBase fails with `PermissionDenied`. A bind mount also hides the auth UI component baked into the image; reinstall it with `trail components add trailbase/auth_ui`.
+To keep the depot in a host folder instead, set `TB_DATA` (or `TB_DATA_ROOT` for the root stack) to a path, e.g. `TB_DATA=./traildepot`. Any value without a `/` is treated by Compose as a volume name, and only `traildepot` is declared, so use a path for anything else.
+
+> **Note:** if you switch the named volume to a host bind mount (e.g. `TB_DATA=./traildepot`) with the rootless image, make sure the host folder exists and is writable by the container user, or TrailBase fails with `PermissionDenied`. A bind mount also hides the auth UI component baked into the image; reinstall it with `trail components add trailbase/auth_ui`.
 
 ## Building for a specific version or architecture
 

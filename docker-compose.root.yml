@@ -29,7 +29,8 @@ services:
       - "${TB_PORT_ROOT:-4000}:${TB_PORT_ROOT:-4000}"
     volumes:
       # persist databases, config, uploads, secrets and backups
-      - traildepot:/app/traildepot
+      # TB_DATA_ROOT: named volume (default) or a host path such as ./traildepot-root (see .env)
+      - ${TB_DATA_ROOT:-traildepot}:/app/traildepot
       # uncomment to develop migrations against the running instance
       # - ./migrations:/app/traildepot/migrations
     healthcheck:
